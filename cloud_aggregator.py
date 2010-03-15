@@ -26,7 +26,7 @@
 import ConfigParser
 import os
 from cStringIO import StringIO
-import logging
+from cloud_logger import Logger
 import sys
 from urlparse import urlparse
 import urllib2
@@ -92,26 +92,7 @@ def loadConfig(logger):
         logger.error( "Configuration file not found in this file's directory")
         sys.exit(RET_CRITICAL)
 
-class Loggable:
-    """ A simple base class to encapsulate useful logging features - Meant to be derived from
-
-    """
-    def __init__(self, callingClass):
-
-        self.logString = StringIO()
-
-        self.logger = logging.getLogger(callingClass)
-        self.logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s ; %(name)s ; %(levelname)s ; %(message)s')
-
-        errorOutputHndlr = logging.FileHandler("cloud_aggregator.log")
-        errorOutputHndlr.setFormatter(formatter)
-        errorOutputHndlr.setLevel(logging.DEBUG)
-
-        self.logger.addHandler(errorOutputHndlr)
-
-
-class CloudAggregatorHTTPRequest(Loggable):
+class CloudAggregatorHTTPRequest:
     """
     This class provides very basic HTTP GET functionality. It was created as a helper class for Perceptor to use
     to query remote Clouds. It implements some basic HTTP protocol functionality including gzip support.
@@ -121,8 +102,9 @@ class CloudAggregatorHTTPRequest(Loggable):
     # agent, but I don't see the need for this currently
     defaultUserAgent = "CloudAggregator/1.0"
 
-    def __init__(self):
-        Loggable.__init__(self,self.__class__.__name__)
+    def __init__(self, logger):
+        #Loggable.__init__(self,self.__class__.__name__)
+        self.logger = logger
 
     # Request the data from the url passed in. This is done with a HTTP GET and the return code is checked to ensure
     # a 200 (sucess) was received
@@ -168,15 +150,19 @@ class CloudAggregatorHTTPRequest(Loggable):
 
         return results
 
-class CloudAggregator(Loggable):
+class CloudAggregator:
     """
     This class is responsible for querying remote Cloud sites, retrieving their resource and real time XML,
     aggregate and validate the retrieved XML and then finally storing the aggregated XML into a RedisDB
     """
     # Since this is the "primary" class, it is designed to be instantiated first and thus will load the 
     # global ConfigMapping data
-    def __init__(self):
-        Loggable.__init__(self, self.__class__.__name__)
+    def __init__(self, logger=None):
+        #Loggable.__init__(self, self.__class__.__name__)
+        if(logger):
+            self.logger = logger
+        else:
+            self.logger = Logger("cloud_aggregator", "cloud_aggregator.log")
         loadConfig(self.logger) 
         
         #Connect to the RedisDB
@@ -228,7 +214,7 @@ class CloudAggregator(Loggable):
         addrList = self.loadTargetAddresses()
         tempDict = {}
 
-        dataReq = CloudAggregatorHTTPRequest()
+        dataReq = CloudAggregatorHTTPRequest(self.logger)
         
         for entry in addrList:
             tempDict[entry] = {}
@@ -315,8 +301,10 @@ class CloudAggregator(Loggable):
         return cloudAddresses
 
 if __name__ == "__main__":
-   
-    loader = CloudAggregator()
+
+    #cloud_aggregator_logger = Logger("cloud_aggregator", "cloud_aggregator.log")
+
+    loader = CloudAggregator()#cloud_aggregator_logger)
     while True:
         daDict = loader.queryRemoteClouds()
         for entry in daDict.keys():

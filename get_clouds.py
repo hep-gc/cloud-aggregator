@@ -29,8 +29,7 @@ import sys
 import os
 from redis import Redis, ConnectionError, ResponseError
 from xml.dom.minidom import parse, parseString
-from cStringIO import StringIO
-import logging
+from cloud_logger import Logger
 import amara
 
 RET_CRITICAL = -1
@@ -44,7 +43,6 @@ CLOUDS_DB = "Clouds_RedisDB_Num"
 CLOUDS_KEY = "Clouds_Key"
 
 ConfigMapping = {}
-
 
 # This global method loads all the user configured options from the configuration file and saves them
 # into the ConfigMapping dictionary
@@ -69,27 +67,9 @@ def loadGetCloudsClientConfig(logger):
         logger.error("Configuration file not found in Nagios Plug-ins directory")
         sys.exit(RET_CRITICAL)
 
-class Loggable:
-    """ A simple base class to encapsulate useful logging features - Meant to be derived from
-
+class getCloudsClient:
     """
-    def __init__(self, callingClass):
-
-        self.logString = StringIO()
-
-        self.logger = logging.getLogger(callingClass)
-        self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s ; %(name)s ; %(levelname)s ; %(message)s')
-
-        errorOutputHndlr = logging.FileHandler("get_clouds.log")
-        errorOutputHndlr.setFormatter(formatter)
-        errorOutputHndlr.setLevel(logging.ERROR)
-
-        self.logger.addHandler(errorOutputHndlr)
-
-class getCloudsClient(Loggable):
-    """
-    This class is responsible for querying the RedisDB for the Sky XML and binding it back into 
+     This class is responsible for querying the RedisDB for the Sky XML and binding it back into 
      a usable data structure. This data structure format is a nested Dictionary of dictionaries and lists. The 
      exact format and names for various keys mimics the public XML format. This means that this class is dependant
      on the public XML format - If the XML changes this class needs to be updated accordingly.
@@ -97,12 +77,15 @@ class getCloudsClient(Loggable):
      requires this knowledge.
     
     """
-    def __init__(self):
-        Loggable.__init__(self,self.__class__.__name__)
+    def __init__(self, logger=None):
+        if(logger):
+            self.logger = logger
+        else:
+            self.logger = Logger("get_clouds","get_clouds.log")
+
         loadGetCloudsClientConfig(self.logger)
 
         self.db = Redis(db=ConfigMapping[CLOUDS_DB], host=ConfigMapping[REDISDB_SERVER_HOSTNAME], port=int(ConfigMapping[REDISDB_SERVER_PORT]))
-
         try:
            self.db.ping()
         except ConnectionError, err:
