@@ -42,6 +42,8 @@ from xml.dom.pulldom import parseString, START_ELEMENT
 
 RET_CRITICAL = -1
 
+# 600 seconds is 10 minutes - the window for "fresh" real time data
+# This # is aribitrary
 TIME_WINDOW = 600
 TIME_STAMP = "TimeStamp"
 
@@ -62,7 +64,6 @@ CONF_FILE_LOC = "cloud_aggregator.cfg"
 CONF_FILE_SECTION = "Cloud_Aggregator"
 
 ConfigMapping = {}
-
 
 # This global method loads all the user configured options from the configuration file and saves them
 # into the ConfigMapping dictionary
@@ -92,10 +93,12 @@ def loadConfig(logger):
         logger.error( "Configuration file not found in this file's directory")
         sys.exit(RET_CRITICAL)
 
+
 class CloudAggregatorHTTPRequest:
     """
-    This class provides very basic HTTP GET functionality. It was created as a helper class for Perceptor to use
-    to query remote Clouds. It implements some basic HTTP protocol functionality including gzip support.
+       This class provides very basic HTTP GET functionality. It was created as a helper class for cloud_aggregator to use
+       to query remote Clouds. It implements basic HTTP protocol functionality including gzip support. However, any HTTP 
+       status returned other than 200/OK is not supported and will be considered an error
     """
 
     # This can be almost anything, this was chosen arbitrarily. One could masquerade as another browser or
@@ -103,7 +106,6 @@ class CloudAggregatorHTTPRequest:
     defaultUserAgent = "CloudAggregator/1.0"
 
     def __init__(self, logger):
-        #Loggable.__init__(self,self.__class__.__name__)
         self.logger = logger
 
     # Request the data from the url passed in. This is done with a HTTP GET and the return code is checked to ensure
@@ -112,13 +114,17 @@ class CloudAggregatorHTTPRequest:
 
         results = self._req(url)
         if results != None:  
+            # If anything other than 'OK'/200 is received, log an error as this code doesn't support any fancy HTTP stuff
             if results['rStatus'] != 200:
+                # BaseHTTPRequestHandler includes a mapping of HTTP return codes to a brief text description
                 self.logger.error("Received HTTP Code: "+str(results['rStatus'])+" - "+ BaseHTTPRequestHandler.responses[results['rStatus']][0])      
             return results['rData']
-        
+        # To prevent "None" from being returned and causing headaches for the caller
         return ""
 
     # A helper method that handles the Python urllib2 code and basic HTTP protocol handling
+    # Only basic HTTP get is implemented, and functionality such as redirects and other HTTP protocol handling is NOT implemented    
+
     def _req(self, url):
        
         if (urlparse(url)[0] != 'http'):
@@ -136,6 +142,7 @@ class CloudAggregatorHTTPRequest:
             self.logger.error(url+" "+str(err))
             return
         results = {}
+        # Here the actual data is gathered from the web server and saved
         results['rData'] = httpOpener.read()
  
         if hasattr(httpOpener, 'headers'):
@@ -158,14 +165,13 @@ class CloudAggregator:
     # Since this is the "primary" class, it is designed to be instantiated first and thus will load the 
     # global ConfigMapping data
     def __init__(self, logger=None):
-        #Loggable.__init__(self, self.__class__.__name__)
         if(logger):
             self.logger = logger
         else:
             self.logger = Logger("cloud_aggregator", "cloud_aggregator.log")
         loadConfig(self.logger) 
         
-        #Connect to the RedisDB
+        #Connect to the RedisDB with the configured options
         self.storageDb = Redis(db=ConfigMapping[TARGET_REDIS_DB], host=ConfigMapping[REDISDB_SERVER_HOSTNAME], port=int(ConfigMapping[REDISDB_SERVER_PORT]))
 
         # Verify the DB is up and running
@@ -183,17 +189,25 @@ class CloudAggregator:
     
     def aggregateRealTimeData(self, cloudXML, rtCloudXML, cloudAddress):
 
+        # Create a DOM representation (in memory)  of both XML documents
         cloudDom = xml.dom.minidom.parseString(cloudXML)
         rtCloudDom = xml.dom.minidom.parseString(rtCloudXML)  
+        
+        # A "hidden" timestamp tag is included with the RealTime XML to alert the cloud_aggregator if the 
+        # data is actually old and hasn't been updated recently. This means it is not really "RealTime" anymore
 
+        # Find the timestamp tag - There should be 1 only
         for curNode in rtCloudDom.getElementsByTagName(TIME_STAMP):
-            #print curNode.toxml()
+            # Caclulate if the Real Time (rt) data received was generated within the configured time window
+            # Hopefully all servers are configured using NTP or something similar to ensure equivalent clocks
+            # across the different hosts
             xmlTimeStamp = int( curNode.firstChild.nodeValue)
             if abs(xmlTimeStamp - int(str(time.time()).strip(".")[0])) > TIME_WINDOW:
-                #pass
                 self.logger.warning("Stale RealTime data received from Cloud at "+cloudAddress)
 
         # The below 2 lines are the W3C method for removing the "current node" from a DOM tree
+        # It looks a little strange to reference the parent from the child only to reference the child again, but 
+        #  this is necessary for the removeChild call to function properly
         tNode = rtCloudDom.getElementsByTagName(TIME_STAMP)[0] 
         # Unlink the node from the DOM tree after we remove it since it will never be referenced again
         tNode.parentNode.removeChild(tNode).unlink()
@@ -202,13 +216,15 @@ class CloudAggregator:
             # temp now contains the XML nodes encompassed by the <RealTime>...</RealTime> tags
             # but not the tags themselves (Public XML Schema/Format does not include <RealTime>...</RealTime>)
             temp = cloudDom.importNode(curNode, True) # True here means do a deep copy
-
+            # The placement the XML doesn't really matter, so just append it to the first child 
             cloudDom.firstChild.appendChild(temp)
 
         return cloudDom.toxml()
  
     # Remotely query the configured server (in your servers file) with the configured paths for both real time and 
     # static XML data 
+    # The data structure returned is a dictionary with the cloud remote address as the first key and the path used
+    # to query the XML as the secondary key
     def queryRemoteClouds(self):
 
         addrList = self.loadTargetAddresses()
@@ -232,7 +248,8 @@ class CloudAggregator:
         return tempDict
 
 
-    # Libxml2 validation against an XSD Schema
+    # Libxml2 validation against an XSD Schema. This code was adapted from the example python code included with the libxml2 
+    # python module
     def validateXML(self, xmlToProcess):
 
         ctxtParser = libxml2.schemaNewParserCtxt(XSD_SCHEMA)
@@ -252,13 +269,14 @@ class CloudAggregator:
         libxml2.schemaCleanupTypes()
         libxml2.cleanupParser()
 
+
     def persistData(self, cloudDict, cloud):
 
         skyXML = StringIO()
         skyXML.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
         skyXML.write("<Sky>")
  
-        # Strip the XML Header declaration from Cloud doc before appending to the Sky doc
+        # Strip the XML Header declaration from Cloud XML doc before appending to the Sky XML doc
         if(cloud != None):
             skyXML.write(cloud[cloud.find("?>")+2:])
         skyXML.write("</Sky>")
@@ -267,15 +285,17 @@ class CloudAggregator:
         #Validate the final 'Sky' XML containing all the cloud information against the XML Schema
         self.validateXML(skyXML.getvalue())
 
-        # Finally, save the valid XML into the database with the well known SKY_KEY
+        # Finally, save the valid XML into the Redis DB with the configured CLOUDS_KEY
         self.storageDb.set(ConfigMapping[CLOUDS_KEY], skyXML.getvalue(), preserve=False)
 
+        # Individual Cloud XML docs are saved in addition to the single, aggregated Sky XML
         for key in cloudDict.keys():
             for subKey in cloudDict[key].keys():
             
+               # Again, we want to strip off the XML declaration before saving it into the DB
                tagIndex = (cloudDict[key][subKey]).find("?>") + 2 
-               # Persist the individual, aggregated cloud XML data into the DB with the path used to find
-               # the XML as the key
+               # Persist the individual, aggregated cloud XML from each cloud site into the DB with the path used 
+               # to query the XML (cloud location + path) as the key
                self.storageDb.set(key+subKey, cloudDict[key][subKey][tagIndex:], preserve=False)
 
         print self.storageDb.get(ConfigMapping[CLOUDS_KEY])
@@ -302,11 +322,10 @@ class CloudAggregator:
 
 if __name__ == "__main__":
 
-    #cloud_aggregator_logger = Logger("cloud_aggregator", "cloud_aggregator.log")
-
-    loader = CloudAggregator()#cloud_aggregator_logger)
+    loader = CloudAggregator()
     while True:
         daDict = loader.queryRemoteClouds()
+        # For each configured remote cloud, lookup it's XML, aggregate it then save it 
         for entry in daDict.keys():
 
             loader.persistData(daDict, loader.aggregateRealTimeData(daDict[entry][ConfigMapping[TARGET_XML_PATH]], daDict[entry][ConfigMapping[TARGET_VM_SLOTS_PATH]], entry))

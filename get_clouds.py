@@ -45,10 +45,11 @@ CLOUDS_KEY = "Clouds_Key"
 ConfigMapping = {}
 
 # This global method loads all the user configured options from the configuration file and saves them
-# into the ConfigMapping dictionary
+# into the global ConfigMapping dictionary
 def loadGetCloudsClientConfig(logger):
 
     cfgFile = ConfigParser.ConfigParser()
+    # Prevent an exception from being generated should the config file not be found in the current directory
     if(os.path.exists(CONF_FILE)):
         cfgFile.read(CONF_FILE)
         try:
@@ -64,7 +65,7 @@ def loadGetCloudsClientConfig(logger):
             logger.error(nopt.message+" of configuration file")
             sys.exit(RET_CRITICAL)
     else:
-        logger.error("Configuration file not found in Nagios Plug-ins directory")
+        logger.error("Configuration file not found in this file's directory!")
         sys.exit(RET_CRITICAL)
 
 class getCloudsClient:
@@ -94,8 +95,9 @@ class getCloudsClient:
 
     def _lookupCloudsXML(self):
 
+        # Query the Redis DB for the complete, aggregated XML file
         cloudsXML = self.db.get(ConfigMapping[CLOUDS_KEY])
-        # amDoc will contain a data structure that mirrors the XML Schema, allowing for direct access via name.name2.name3 style
+        # amDoc will contain a data structure that mirrors the public XML Schema, allowing for direct access via name.name2.name3 style
         amDoc = amara.parse(str(cloudsXML)) 
 
         return amDoc
@@ -148,6 +150,7 @@ class getCloudsClient:
        tempNodes = []
        for curnode in cloud.VMM_Pools.Pool:
            tDict = {}
+           # This loop gives all the children of the 'Pool' XML node
            for entry in  curnode.xml_properties.keys():
                tDict[entry] = str(curnode.xml_properties[entry])
            tempNodes.append(tDict)
@@ -159,6 +162,7 @@ class getCloudsClient:
 
         for curnode in cloud.Network_Pools.Pool:
             tDict = {}
+            # This loop gives all the children of the 'Pool' XML node
             for entry in curnode.xml_properties.keys():
                 tDict[entry] = str(curnode.xml_properties[entry])
             tempNodes.append(tDict)
