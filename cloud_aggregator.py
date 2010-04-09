@@ -49,12 +49,12 @@ TIME_STAMP = "TimeStamp"
 
 XSD_SCHEMA = "clouds.xsd"
 
-MONITORING_XML_LOC = "Local_Monitoring_XML_Data"
+#MONITORING_XML_LOC = "Local_Monitoring_XML_Data"
 TARGET_CLOUDS_LOC = "Clouds_Addr_File"
 TARGET_XML_PATH = "Target_Monitoring_Data_Path"
 TARGET_VM_SLOTS_PATH = "Target_VM_Slots_Path"
 
-TARGET_REDIS_DB = "Target_Redis_DB_Id"
+TARGET_REDIS_DB = "Target_RedisDB_Id"
 CLOUDS_KEY = "Clouds_Key"
 UPDATE_INTERVAL = "Update_Interval"
 REDISDB_SERVER_HOSTNAME = "RedisDB_Server_Hostname"
@@ -73,7 +73,7 @@ def loadConfig(logger):
     if(os.path.exists(CONF_FILE_LOC)):
         cfgFile.read(CONF_FILE_LOC)
         try:
-            ConfigMapping[MONITORING_XML_LOC] = cfgFile.get(CONF_FILE_SECTION,MONITORING_XML_LOC,0)
+#            ConfigMapping[MONITORING_XML_LOC] = cfgFile.get(CONF_FILE_SECTION,MONITORING_XML_LOC,0)
             ConfigMapping[TARGET_CLOUDS_LOC] = cfgFile.get(CONF_FILE_SECTION,TARGET_CLOUDS_LOC,0)
             ConfigMapping[TARGET_REDIS_DB] = cfgFile.get(CONF_FILE_SECTION,TARGET_REDIS_DB,0)
             ConfigMapping[CLOUDS_KEY] = cfgFile.get(CONF_FILE_SECTION, CLOUDS_KEY,0)            
@@ -202,7 +202,8 @@ class CloudAggregator:
             # Hopefully all servers are configured using NTP or something similar to ensure equivalent clocks
             # across the different hosts
             xmlTimeStamp = int( curNode.firstChild.nodeValue)
-            if abs(xmlTimeStamp - int(str(time.time()).strip(".")[0])) > TIME_WINDOW:
+            
+            if abs(xmlTimeStamp - int(str(time.time()).split(".")[0])) > TIME_WINDOW:
                 self.logger.warning("Stale RealTime data received from Cloud at "+cloudAddress)
 
         # The below 2 lines are the W3C method for removing the "current node" from a DOM tree
