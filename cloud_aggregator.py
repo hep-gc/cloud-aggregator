@@ -179,8 +179,8 @@ class CloudAggregator:
            self.storageDb.ping()
            self.logger.debug("RedisDB server alive")
         except ConnectionError, err:
-            print str(err)
-            self.logger.error("ConnectionError pinging DB - redis-server running on desired port?")
+#            print str(err)
+            self.logger.error("redis-server running on desired port? "+str(err))
             sys.exit(RET_CRITICAL)
   
     # This method will combine the real time XML data with the standard resource/Cloud data and return a 
@@ -331,5 +331,5 @@ if __name__ == "__main__":
 
             loader.persistData(daDict, loader.aggregateRealTimeData(daDict[entry][ConfigMapping[TARGET_XML_PATH]], daDict[entry][ConfigMapping[TARGET_VM_SLOTS_PATH]], entry))
 
-        time.sleep(int(ConfigMapping[UPDATE_INTERVAL]))
+        time.sleep(float(ConfigMapping[UPDATE_INTERVAL]))
 
