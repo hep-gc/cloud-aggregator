@@ -54,7 +54,7 @@ TARGET_CLOUDS_LOC = "Clouds_Addr_File"
 TARGET_XML_PATH = "Target_Monitoring_Data_Path"
 TARGET_VM_SLOTS_PATH = "Target_VM_Slots_Path"
 
-TARGET_REDIS_DB = "Target_RedisDB_Id"
+TARGET_REDIS_DB = "Target_Redis_DB_Id"
 CLOUDS_KEY = "Clouds_Key"
 UPDATE_INTERVAL = "Update_Interval"
 REDISDB_SERVER_HOSTNAME = "RedisDB_Server_Hostname"
@@ -317,7 +317,7 @@ class CloudAggregator:
             except IOError, err:
                 self.logger.error("IOError processing "+ConfigMapping[TARGET_CLUSTERS_LOC]+" - "+str(err))
         else:
-            self.logger.error("Unable to find a filesystem path for Clusters_Addr_File configured in sky_aggregator.cfg")
+            self.logger.error("Unable to find a filesystem path for Clusters_Addr_File configured in cloud_aggregator.cfg")
 
         return cloudAddresses
 
